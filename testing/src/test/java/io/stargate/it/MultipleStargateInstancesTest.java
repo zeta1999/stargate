@@ -158,7 +158,23 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
           .isBetween(expectedNumberOfRequests - tolerance, expectedNumberOfRequests + tolerance);
     }
 
+    // when restart the stargate node
     startStargateInstance(0);
+
+    nodes = getUpNodes();
+    assertThat(nodes.size()).isEqualTo(numberOfStargateNodes);
+
+    // then
+    for (Node n : nodes) {
+      long cqlMessages = getCqlMessages(n);
+      // there should be N nodes again, where every node has numberOfRequestPerOneNodeOfN * 2 +
+      // numberOfRequestPerOneNodeOfNMinus1
+      // because after restart, the traffic should be distributed to N nodes again.
+      long expectedNumberOfRequests =
+          numberOfRequestPerOneNodeOfN * 2 + numberOfRequestPerOneNodeOfNMinus1;
+      assertThat(cqlMessages)
+          .isBetween(expectedNumberOfRequests - tolerance, expectedNumberOfRequests + tolerance);
+    }
   }
 
   private long getCqlMessages(Node n) {
