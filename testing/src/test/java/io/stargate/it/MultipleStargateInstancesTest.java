@@ -29,6 +29,7 @@ import com.datastax.oss.driver.api.core.metrics.DefaultNodeMetric;
 import com.datastax.oss.driver.internal.core.loadbalancing.DcInferringLoadBalancingPolicy;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -39,6 +40,8 @@ import org.junit.Test;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.testcontainers.containers.ToxiproxyContainer;
+import org.testcontainers.containers.ToxiproxyContainer.ContainerProxy;
 
 @RunWith(Parameterized.class)
 @NotThreadSafe
@@ -51,6 +54,8 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
   private String keyspace;
 
   private CqlSession session;
+
+  private List<ToxiproxyContainer> toxiProxyContainers = new ArrayList<>();
 
   @Before
   public void setup() {
@@ -71,7 +76,14 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
 
     CqlSessionBuilder cqlSessionBuilder = CqlSession.builder().withConfigLoader(loader);
     for (String host : getStargateHosts()) {
-      cqlSessionBuilder.addContactPoint(new InetSocketAddress(host, 9043));
+      int stargatePort = 9043;
+      ToxiproxyContainer toxiproxyContainer = new ToxiproxyContainer();
+      toxiproxyContainer.start();
+      toxiProxyContainers.add(toxiproxyContainer);
+      ContainerProxy proxy = toxiproxyContainer.getProxy(host, stargatePort);
+
+      cqlSessionBuilder.addContactPoint(
+          new InetSocketAddress(proxy.getContainerIpAddress(), proxy.getProxyPort()));
     }
     session = cqlSessionBuilder.build();
 
