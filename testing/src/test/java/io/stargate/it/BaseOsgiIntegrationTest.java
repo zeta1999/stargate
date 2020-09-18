@@ -483,7 +483,12 @@ public class BaseOsgiIntegrationTest {
 
   public void stopStargateInstance(int stargateNodeNumber)
       throws BundleException, InterruptedException {
-    stargateStarters.get(stargateNodeNumber).stop();
+    logger.info("Stopping stargate instance nr: " + stargateNodeNumber);
+    try {
+      stargateStarters.get(stargateNodeNumber).stop();
+    } catch (Exception ex) {
+      logger.error("Error when stopping stargate instance nr: " + stargateNodeNumber, ex);
+    }
   }
 
   private void startStargateInstance(String seedHost, Integer seedPort, int stargateNodeNumber)
