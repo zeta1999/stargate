@@ -144,7 +144,7 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
     // when stop 1st stargate node
     stopStargateInstance(0);
 
-    //    assertThat(getUpNodes().size()).isEqualTo(2);
+    assertThat(getUpNodes().size()).isEqualTo(numberOfStargateNodes - 1);
     insertRecords(totalNumberOfRequests);
 
     for (Node n : getUpNodes()) {

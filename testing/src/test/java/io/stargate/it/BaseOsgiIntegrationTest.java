@@ -483,7 +483,8 @@ public class BaseOsgiIntegrationTest {
       throws BundleException, InterruptedException {
     logger.info("Stopping stargate instance nr: " + stargateNodeNumber);
     try {
-      stargateStarters.get(stargateNodeNumber).stop();
+      Starter removedStarter = stargateStarters.remove(stargateNodeNumber);
+      removedStarter.stop();
     } catch (Exception ex) {
       logger.error("Error when stopping stargate instance nr: " + stargateNodeNumber, ex);
     }
@@ -492,7 +493,7 @@ public class BaseOsgiIntegrationTest {
   public void startStargateInstance(int stargateNodeNumber) {
     logger.info("Starting stargate instance nr: " + stargateNodeNumber);
     try {
-      stargateStarters.get(stargateNodeNumber).start();
+      startStargateInstance(CASSANDRA_LISTEN_ADDRESS, CASSANDRA_CONTAINER_PORT, stargateNodeNumber);
     } catch (Exception ex) {
       logger.error("Error when starting stargate instance nr: " + stargateNodeNumber, ex);
     }
