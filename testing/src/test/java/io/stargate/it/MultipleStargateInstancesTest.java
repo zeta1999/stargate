@@ -25,23 +25,24 @@ import com.datastax.oss.driver.api.core.config.DriverConfigLoader;
 import com.datastax.oss.driver.api.core.cql.Row;
 import com.datastax.oss.driver.api.core.cql.SimpleStatement;
 import com.datastax.oss.driver.api.core.metadata.Node;
+import com.datastax.oss.driver.api.core.metadata.NodeState;
 import com.datastax.oss.driver.api.core.metrics.DefaultNodeMetric;
 import com.datastax.oss.driver.internal.core.loadbalancing.DcInferringLoadBalancingPolicy;
 import java.net.InetSocketAddress;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 import net.jcip.annotations.NotThreadSafe;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.testcontainers.containers.ToxiproxyContainer;
-import org.testcontainers.containers.ToxiproxyContainer.ContainerProxy;
+import org.osgi.framework.BundleException;
 
 @RunWith(Parameterized.class)
 @NotThreadSafe
@@ -54,8 +55,6 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
   private String keyspace;
 
   private CqlSession session;
-
-  private List<ToxiproxyContainer> toxiProxyContainers = new ArrayList<>();
 
   @Before
   public void setup() {
@@ -75,15 +74,9 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
             .build();
 
     CqlSessionBuilder cqlSessionBuilder = CqlSession.builder().withConfigLoader(loader);
-    for (String host : getStargateHosts()) {
-      int stargatePort = 9043;
-      ToxiproxyContainer toxiproxyContainer = new ToxiproxyContainer();
-      toxiproxyContainer.start();
-      toxiProxyContainers.add(toxiproxyContainer);
-      ContainerProxy proxy = toxiproxyContainer.getProxy(host, stargatePort);
 
-      cqlSessionBuilder.addContactPoint(
-          new InetSocketAddress(proxy.getContainerIpAddress(), proxy.getProxyPort()));
+    for (String host : getStargateHosts()) {
+      cqlSessionBuilder.addContactPoint(new InetSocketAddress(host, 9043));
     }
     session = cqlSessionBuilder.build();
 
@@ -103,7 +96,7 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
   }
 
   @Test
-  public void shouldDistributeTrafficUniformly() {
+  public void distributeTrafficUniformly() {
     // given
     createKeyspaceAndTable();
     long totalNumberOfRequests = 300;
@@ -112,6 +105,67 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
     long tolerance = 5;
 
     // when
+    insertRecords(totalNumberOfRequests);
+
+    // then
+    Collection<Node> nodes = session.getMetadata().getNodes().values();
+    assertThat(nodes.size()).isEqualTo(numberOfStargateNodes);
+    for (Node n : nodes) {
+      long cqlMessages = getCqlMessages(n);
+      assertThat(cqlMessages)
+          .isBetween(numberOfRequestPerNode - tolerance, numberOfRequestPerNode + tolerance);
+    }
+  }
+
+  @Test
+  public void continueServeTrafficWhenInstanceGoesDownAndUp()
+      throws InterruptedException, BundleException {
+    // given
+    createKeyspaceAndTable();
+    long totalNumberOfRequests = 300;
+    long numberOfRequestPerOneNodeOfN = totalNumberOfRequests / numberOfStargateNodes;
+    long numberOfRequestPerOneNodeOfNMinus1 = totalNumberOfRequests / (numberOfStargateNodes - 1);
+    // difference tolerance - every node should have numberOfRequestPerNode +- tolerance
+    long tolerance = 5;
+
+    // when
+    insertRecords(totalNumberOfRequests);
+
+    // then
+    Collection<Node> nodes = getUpNodes();
+    assertThat(nodes.size()).isEqualTo(numberOfStargateNodes);
+    for (Node n : nodes) {
+      long cqlMessages = getCqlMessages(n);
+      assertThat(cqlMessages)
+          .isBetween(
+              numberOfRequestPerOneNodeOfN - tolerance, numberOfRequestPerOneNodeOfN + tolerance);
+    }
+
+    // when stop 1st stargate node
+    stopStargateInstance(0);
+    insertRecords(totalNumberOfRequests);
+
+    nodes = getUpNodes();
+    assertThat(nodes.size()).isEqualTo(numberOfStargateNodes - 1);
+    for (Node n : nodes) {
+      long cqlMessages = getCqlMessages(n);
+      // there should be N - 1 nodes, where every node has numberOfRequestPerOneNodeOfN +
+      // numberOfRequestPerOneNodeOfNMinus1
+      // because after killing one node, the traffic is distributed to N - 1.
+      long expectedNumberOfRequests =
+          numberOfRequestPerOneNodeOfN + numberOfRequestPerOneNodeOfNMinus1;
+      assertThat(cqlMessages)
+          .isBetween(expectedNumberOfRequests - tolerance, expectedNumberOfRequests + tolerance);
+    }
+  }
+
+  private long getCqlMessages(Node n) {
+    return ((Timer)
+            session.getMetrics().get().getNodeMetric(n, DefaultNodeMetric.CQL_MESSAGES).get())
+        .getCount();
+  }
+
+  private void insertRecords(long totalNumberOfRequests) {
     for (int i = 0; i < totalNumberOfRequests; i++) {
       session.execute(
           SimpleStatement.newInstance(
@@ -120,18 +174,13 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
               i,
               i));
     }
+  }
 
-    // then
-    Collection<Node> nodes = session.getMetadata().getNodes().values();
-    assertThat(nodes.size()).isEqualTo(numberOfStargateNodes);
-    for (Node n : nodes) {
-      long cqlMessages =
-          ((Timer)
-                  session.getMetrics().get().getNodeMetric(n, DefaultNodeMetric.CQL_MESSAGES).get())
-              .getCount();
-      assertThat(cqlMessages)
-          .isBetween(numberOfRequestPerNode - tolerance, numberOfRequestPerNode + tolerance);
-    }
+  @NotNull
+  private List<Node> getUpNodes() {
+    return session.getMetadata().getNodes().values().stream()
+        .filter(n -> n.getState().equals(NodeState.UP))
+        .collect(Collectors.toList());
   }
 
   private void createKeyspace() {

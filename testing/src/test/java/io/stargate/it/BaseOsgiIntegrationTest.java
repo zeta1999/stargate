@@ -90,6 +90,10 @@ public class BaseOsgiIntegrationTest {
 
   public static final String SEED_PORT_OVERRIDE_FLAG = "stargate.test_seed_port_override";
 
+  private static final String CASSANDRA_LISTEN_ADDRESS = "127.0.0.2";
+
+  private static final int CASSANDRA_CONTAINER_PORT = 7000;
+
   static GenericContainer backendContainer;
 
   private static List<Starter> stargateStarters = new ArrayList<>();
@@ -392,7 +396,6 @@ public class BaseOsgiIntegrationTest {
 
   @Before
   public void baseSetup() throws BundleException, InterruptedException, IOException {
-    String cassandraListenAddress = "127.0.0.2";
 
     if (backendContainer != null && !backendContainer.getDockerImageName().equals(dockerImage)) {
       logger.info("Docker image changed {} {}", dockerImage, backendContainer.getDockerImageName());
@@ -408,7 +411,7 @@ public class BaseOsgiIntegrationTest {
     }
 
     if (backendContainer == null) {
-      backendContainer = startBackend(cassandraListenAddress);
+      backendContainer = startBackend(CASSANDRA_LISTEN_ADDRESS);
 
       if (isDse) {
         datacenter = "dc1";
@@ -421,8 +424,8 @@ public class BaseOsgiIntegrationTest {
       for (int i = 1; i <= numberOfStargateNodes; i++) {
         stargateHosts.add("127.0.0.1" + i);
       }
-      String seedHost = cassandraListenAddress;
-      Integer seedPort = 7000;
+      String seedHost = CASSANDRA_LISTEN_ADDRESS;
+      Integer seedPort = CASSANDRA_CONTAINER_PORT;
       // This logic only works with C* >= 4.0
       if (Boolean.getBoolean(SKIP_HOST_NETWORKING_FLAG)) {
         String dockerHostIP =
@@ -476,6 +479,11 @@ public class BaseOsgiIntegrationTest {
         }
       }
     }
+  }
+
+  public void stopStargateInstance(int stargateNodeNumber)
+      throws BundleException, InterruptedException {
+    stargateStarters.get(stargateNodeNumber).stop();
   }
 
   private void startStargateInstance(String seedHost, Integer seedPort, int stargateNodeNumber)
