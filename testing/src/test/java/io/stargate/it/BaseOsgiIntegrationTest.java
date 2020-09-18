@@ -491,6 +491,15 @@ public class BaseOsgiIntegrationTest {
     }
   }
 
+  public void startStargateInstance(int stargateNodeNumber) {
+    logger.info("Starting stargate instance nr: " + stargateNodeNumber);
+    try {
+      stargateStarters.get(stargateNodeNumber).start();
+    } catch (Exception ex) {
+      logger.error("Error when starting stargate instance nr: " + stargateNodeNumber, ex);
+    }
+  }
+
   private void startStargateInstance(String seedHost, Integer seedPort, int stargateNodeNumber)
       throws IOException, BundleException {
     int jmxPort = new ServerSocket(0).getLocalPort();

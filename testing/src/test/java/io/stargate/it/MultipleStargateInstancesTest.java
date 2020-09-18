@@ -157,6 +157,8 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
       assertThat(cqlMessages)
           .isBetween(expectedNumberOfRequests - tolerance, expectedNumberOfRequests + tolerance);
     }
+
+    startStargateInstance(0);
   }
 
   private long getCqlMessages(Node n) {
