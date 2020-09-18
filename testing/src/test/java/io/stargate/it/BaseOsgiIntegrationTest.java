@@ -474,8 +474,6 @@ public class BaseOsgiIntegrationTest {
           } catch (Exception ex2) {
             logger.error("Exception when retrying start of the stargate node nr: " + i, ex2);
           }
-        } finally {
-          logger.error("Successful starting stargate node nr: {}", i);
         }
       }
     }
