@@ -16,6 +16,7 @@
 package io.stargate.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.codahale.metrics.Timer;
 import com.datastax.oss.driver.api.core.CqlSession;
@@ -145,9 +146,10 @@ public class MultipleStargateInstancesTest extends BaseOsgiIntegrationTest {
     stopStargateInstance(0);
     insertRecords(totalNumberOfRequests);
 
-    nodes = getUpNodes();
-    assertThat(nodes.size()).isEqualTo(numberOfStargateNodes - 1);
-    for (Node n : nodes) {
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .until(() -> getUpNodes().size() == numberOfStargateNodes - 1);
+    for (Node n : getUpNodes()) {
       long cqlMessages = getCqlMessages(n);
       // there should be N - 1 nodes, where every node has numberOfRequestPerOneNodeOfN +
       // numberOfRequestPerOneNodeOfNMinus1
